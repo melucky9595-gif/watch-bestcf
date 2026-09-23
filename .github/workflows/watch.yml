@@ -46,16 +46,19 @@ jobs:
             [ -z "$line" ] && continue
             ip="${line%%#*}"
             clean_ip=$(echo "$ip" | tr -d '[]')
-            ms=$(curl -s -o /dev/null --max-time 3 \
+            data=$(curl -s -o /dev/null --max-time 8 \
               --resolve speed.cloudflare.com:443:"$clean_ip" \
-              -w "%{time_connect}" \
-              "https://speed.cloudflare.com/__down?bytes=1000" 2>/dev/null)
-            if [ -n "$ms" ] && [ "$ms" != "0.000000" ]; then
+              -w "%{time_connect} %{speed_download}" \
+              "https://speed.cloudflare.com/__down?bytes=5000000" 2>/dev/null)
+            ms=$(echo "$data" | awk '{print $1}')
+            speed=$(echo "$data" | awk '{print $2}')
+            if [ -n "$ms" ] && [ "$ms" != "0.000000" ] && [ -n "$speed" ]; then
               ms_int=$(awk "BEGIN{printf \"%d\", $ms*1000}")
-              echo "$ms_int $ip" >> result.txt
+              mbps=$(awk "BEGIN{printf \"%.1f\", $speed*8/1000000}")
+              echo "$speed $ip $ms_int $mbps" >> result.txt
             fi
           done < current/ctcc-ip.txt
-          sort -n result.txt | head -5 | awk '{print $2"#"$1"ms"}' > docs_data.txt
+          sort -rn result.txt | head -5 | awk '{print $2"#"$3"ms_"$4"Mbps"}' > docs_data.txt
           cat docs_data.txt
 
       - name: Build outputs
@@ -71,4 +74,3 @@ jobs:
           git add hashes/ docs/
           git diff --cached --quiet || git commit -m "update data"
           git push
-
