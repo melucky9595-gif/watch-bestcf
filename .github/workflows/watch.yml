@@ -40,12 +40,12 @@ jobs:
 
       - name: Build JSON API
         run: |
-          mkdir -p public
+          mkdir -p docs
           python3 -c "
           import json
           with open('current/bestcf-ip.txt') as f:
               lines = [l.strip() for l in f if l.strip()]
-          with open('public/data.json', 'w') as out:
+          with open('docs/data.json', 'w') as out:
               json.dump({'updated_at': '$(date -u +%Y-%m-%dT%H:%M:%SZ)', 'ips': lines}, out, ensure_ascii=False, indent=2)
           "
 
@@ -53,6 +53,6 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add hashes/ public/
+          git add hashes/ docs/
           git diff --cached --quiet || git commit -m "update data"
           git push
