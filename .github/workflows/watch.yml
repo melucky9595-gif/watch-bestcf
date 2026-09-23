@@ -1,8 +1,11 @@
 name: Watch File
 on:
   schedule:
-    - cron: '0 0,12 * * *'   # 每天 UTC 0点和12点,相当于北京时间早8点、晚8点
+    - cron: '0 0,12 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   check:
@@ -35,12 +38,21 @@ jobs:
             -d chat_id=${{ secrets.TG_CHAT_ID }} \
             -d text="bestcf-ip.txt 文件已更新"
 
-      - name: Commit new hash
-        if: steps.diff.outputs.changed == 'true'
+      - name: Build JSON API
+        run: |
+          mkdir -p public
+          python3 -c "
+          import json
+          with open('current/bestcf-ip.txt') as f:
+              lines = [l.strip() for l in f if l.strip()]
+          with open('public/data.json', 'w') as out:
+              json.dump({'updated_at': '$(date -u +%Y-%m-%dT%H:%M:%SZ)', 'ips': lines}, out, ensure_ascii=False, indent=2)
+          "
+
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add hashes/
-          git commit -m "update hash"
+          git add hashes/ public/
+          git diff --cached --quiet || git commit -m "update data"
           git push
-
