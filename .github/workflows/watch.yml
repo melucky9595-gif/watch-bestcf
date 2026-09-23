@@ -38,17 +38,28 @@ jobs:
             -d chat_id=${{ secrets.TG_CHAT_ID }} \
             -d text="ctcc-ip.txt 文件已更新"
 
-      - name: Test US to Japan latency and speed
+      - name: Speed test IPs (download speed priority)
         run: |
-          data=$(curl -s -o /dev/null --max-time 15 \
-            -w "%{time_connect} %{speed_download}" \
-            "https://www.yahoo.co.jp" 2>/dev/null)
-          ms=$(echo "$data" | awk '{print $1}')
-          speed=$(echo "$data" | awk '{print $2}')
-          ms_int=$(awk "BEGIN{printf \"%d\", $ms*1000}")
-          mbps=$(awk "BEGIN{printf \"%.1f\", $speed*8/1000000}")
-          echo "US -> Japan (Yahoo Japan) latency: ${ms_int}ms, speed: ${mbps}Mbps"
-          echo "US-to-Japan latency: ${ms_int}ms, speed: ${mbps}Mbps" > docs_data.txt
+          set +e
+          > result.txt
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            ip="${line%%#*}"
+            clean_ip=$(echo "$ip" | tr -d '[]')
+            data=$(curl -s -o /dev/null --max-time 8 \
+              --resolve speed.cloudflare.com:443:"$clean_ip" \
+              -w "%{time_connect} %{speed_download}" \
+              "https://speed.cloudflare.com/__down?bytes=5000000" 2>/dev/null)
+            ms=$(echo "$data" | awk '{print $1}')
+            speed=$(echo "$data" | awk '{print $2}')
+            if [ -n "$ms" ] && [ "$ms" != "0.000000" ] && [ -n "$speed" ]; then
+              ms_int=$(awk "BEGIN{printf \"%d\", $ms*1000}")
+              mbps=$(awk "BEGIN{printf \"%.1f\", $speed*8/1000000}")
+              echo "$speed $ip $ms_int $mbps" >> result.txt
+            fi
+          done < current/ctcc-ip.txt
+          sort -rn result.txt | head -5 | awk '{print $2"#"$3"ms_"$4"Mbps"}' > docs_data.txt
+          cat docs_data.txt
 
       - name: Build outputs
         run: |
