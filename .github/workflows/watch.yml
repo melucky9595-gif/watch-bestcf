@@ -37,7 +37,7 @@ jobs:
           108.162.198.3:2083#jp 【日本3】 JP
           EOF
 
-      - name: Long-term stability test (30s per IP)
+      - name: Peak download speed test (3s per IP)
         run: |
           set +e
           > result.txt
@@ -48,35 +48,17 @@ jobs:
             ip="${ip_port%%:*}"
             port="${ip_port#*:}"
 
-            success=0
-            total=0
-            total_ms=0
-            end_time=$((SECONDS+30))
+            data=$(curl -s -o /dev/null --max-time 3 \
+              --resolve speed.cloudflare.com:"$port":"$ip" \
+              -w "%{speed_download}" \
+              "https://speed.cloudflare.com:$port/__down?bytes=20000000" 2>/dev/null)
 
-            while [ $SECONDS -lt $end_time ]; do
-              ms=$(curl -s -o /dev/null --max-time 3 \
-                --resolve speed.cloudflare.com:"$port":"$ip" \
-                -w "%{time_connect}" \
-                "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
-              total=$((total+1))
-              if [ -n "$ms" ] && [ "$ms" != "0.000000" ]; then
-                ms_int=$(awk "BEGIN{printf \"%.0f\", $ms*1000}")
-                success=$((success+1))
-                total_ms=$((total_ms+ms_int))
-              fi
-              sleep 1
-            done
-
-            if [ "$success" -gt 0 ]; then
-              avg_ms=$((total_ms/success))
-            else
-              avg_ms=9999
+            if [ -n "$data" ] && [ "$data" != "0" ]; then
+              mbps=$(awk "BEGIN{printf \"%.1f\", $data*8/1000000}")
+              echo "$data ${ip_port}#${note}_${mbps}Mbps" >> result.txt
             fi
-            rate=$(awk "BEGIN{printf \"%.0f\", $success*100/$total}")
-
-            echo "$rate $avg_ms ${ip_port}#${note}_存活${rate}%_${avg_ms}ms" >> result.txt
           done < current_list.txt
-          sort -k1,1nr -k2,2n result.txt | awk '{$1="";$2=""; print substr($0,3)}' > docs_data.txt
+          sort -rn result.txt | awk '{$1=""; print substr($0,2)}' > docs_data.txt
           cat docs_data.txt
 
       - name: Notify Telegram
