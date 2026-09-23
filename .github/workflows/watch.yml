@@ -40,6 +40,7 @@ jobs:
 
       - name: Speed test IPs
         run: |
+          set +e
           > result.txt
           while IFS= read -r line; do
             [ -z "$line" ] && continue
@@ -49,12 +50,13 @@ jobs:
               --resolve speed.cloudflare.com:443:"$clean_ip" \
               -w "%{time_connect}" \
               "https://speed.cloudflare.com/__down?bytes=1000" 2>/dev/null)
-            if [ -n "$ms" ]; then
+            if [ -n "$ms" ] && [ "$ms" != "0.000000" ]; then
               ms_int=$(awk "BEGIN{printf \"%d\", $ms*1000}")
               echo "$ms_int $ip" >> result.txt
             fi
           done < current/ctcc-ip.txt
           sort -n result.txt | head -5 | awk '{print $2"#"$1"ms"}' > docs_data.txt
+          cat docs_data.txt
 
       - name: Build outputs
         run: |
@@ -69,3 +71,4 @@ jobs:
           git add hashes/ docs/
           git diff --cached --quiet || git commit -m "update data"
           git push
+
