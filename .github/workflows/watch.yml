@@ -37,7 +37,7 @@ jobs:
           108.162.198.3:2083#jp 【日本3】 JP
           EOF
 
-      - name: Speed and stability test
+      - name: Long-term stability test (30s per IP)
         run: |
           set +e
           > result.txt
@@ -48,39 +48,35 @@ jobs:
             ip="${ip_port%%:*}"
             port="${ip_port#*:}"
 
-            # 测3次延迟,算抖动
-            lat1=$(curl -s -o /dev/null --max-time 3 --resolve speed.cloudflare.com:"$port":"$ip" -w "%{time_connect}" "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
-            lat2=$(curl -s -o /dev/null --max-time 3 --resolve speed.cloudflare.com:"$port":"$ip" -w "%{time_connect}" "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
-            lat3=$(curl -s -o /dev/null --max-time 3 --resolve speed.cloudflare.com:"$port":"$ip" -w "%{time_connect}" "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
+            success=0
+            total=0
+            total_ms=0
+            end_time=$((SECONDS+30))
 
-            if [ -z "$lat1" ] || [ -z "$lat2" ] || [ -z "$lat3" ]; then
-              continue
+            while [ $SECONDS -lt $end_time ]; do
+              ms=$(curl -s -o /dev/null --max-time 3 \
+                --resolve speed.cloudflare.com:"$port":"$ip" \
+                -w "%{time_connect}" \
+                "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
+              total=$((total+1))
+              if [ -n "$ms" ] && [ "$ms" != "0.000000" ]; then
+                ms_int=$(awk "BEGIN{printf \"%.0f\", $ms*1000}")
+                success=$((success+1))
+                total_ms=$((total_ms+ms_int))
+              fi
+              sleep 1
+            done
+
+            if [ "$success" -gt 0 ]; then
+              avg_ms=$((total_ms/success))
+            else
+              avg_ms=9999
             fi
+            rate=$(awk "BEGIN{printf \"%.0f\", $success*100/$total}")
 
-            jitter_ms=$(awk -v a="$lat1" -v b="$lat2" -v c="$lat3" 'BEGIN{
-              max=a; min=a
-              if(b>max)max=b; if(b<min)min=b
-              if(c>max)max=c; if(c<min)min=c
-              printf "%.1f", (max-min)*1000
-            }')
-
-            # 测10秒持续下载速度(大文件+限时10秒)
-            data=$(curl -s -o /dev/null --max-time 10 \
-              --resolve speed.cloudflare.com:"$port":"$ip" \
-              -w "%{speed_download}" \
-              "https://speed.cloudflare.com:$port/__down?bytes=50000000" 2>/dev/null)
-
-            if [ -z "$data" ] || [ "$data" == "0" ]; then
-              continue
-            fi
-
-            mbps=$(awk -v s="$data" 'BEGIN{printf "%.1f", s*8/1000000}')
-
-            score=$(awk -v m="$mbps" -v j="$jitter_ms" 'BEGIN{printf "%.4f", m/(1+j/100)}')
-
-            echo "$score ${ip_port}#${note}_${mbps}Mbps_稳定性${jitter_ms}ms" >> result.txt
+            echo "$rate $avg_ms ${ip_port}#${note}_存活${rate}%_${avg_ms}ms" >> result.txt
           done < current_list.txt
-          sort -rn result.txt | awk '{$1=""; print substr($0,2)}' > docs_data.txt
+          sort -k1,1nr -k2,2n result.txt | awk '{$1="";$2=""; print substr($0,3)}' > docs_data.txt
           cat docs_data.txt
 
       - name: Notify Telegram
