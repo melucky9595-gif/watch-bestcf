@@ -37,7 +37,7 @@ jobs:
           108.162.198.3:2083#jp 【日本3】 JP
           EOF
 
-      - name: Peak download speed test (3s per IP)
+      - name: 3-second total download test
         run: |
           set +e
           > result.txt
@@ -48,14 +48,14 @@ jobs:
             ip="${ip_port%%:*}"
             port="${ip_port#*:}"
 
-            data=$(curl -s -o /dev/null --max-time 3 \
+            bytes=$(curl -s -o /dev/null --max-time 3 \
               --resolve speed.cloudflare.com:"$port":"$ip" \
-              -w "%{speed_download}" \
-              "https://speed.cloudflare.com:$port/__down?bytes=20000000" 2>/dev/null)
+              -w "%{size_download}" \
+              "https://speed.cloudflare.com:$port/__down?bytes=100000000" 2>/dev/null)
 
-            if [ -n "$data" ] && [ "$data" != "0" ]; then
-              mbps=$(awk "BEGIN{printf \"%.1f\", $data*8/1000000}")
-              echo "$data ${ip_port}#${note}_${mbps}Mbps" >> result.txt
+            if [ -n "$bytes" ] && [ "$bytes" != "0" ]; then
+              mb=$(awk "BEGIN{printf \"%.1f\", $bytes/1000000}")
+              echo "$bytes ${ip_port}#${note}_${mb}MB/3s" >> result.txt
             fi
           done < current_list.txt
           sort -rn result.txt | awk '{$1=""; print substr($0,2)}' > docs_data.txt
