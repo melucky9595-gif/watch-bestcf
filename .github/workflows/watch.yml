@@ -41,6 +41,7 @@ jobs:
       - name: Build JSON API
         run: |
           mkdir -p docs
+          touch docs/.nojekyll
           python3 -c "
           import json
           with open('current/bestcf-ip.txt') as f:
