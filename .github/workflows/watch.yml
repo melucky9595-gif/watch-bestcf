@@ -16,17 +16,17 @@ jobs:
       - name: Download target file
         run: |
           mkdir -p current
-          curl -sL -o current/bestcf-ip.txt "https://github.com/DustinWin/bestcf/releases/download/bestcf/bestcf-ip.txt"
+          curl -sL -o current/ctcc-ip.txt "https://github.com/DustinWin/bestcf/releases/download/bestcf/ctcc-ip.txt"
 
       - name: Compare hash
         id: diff
         run: |
           mkdir -p hashes
-          NEW_HASH=$(sha256sum current/bestcf-ip.txt | awk '{print $1}')
-          OLD_HASH=$(cat hashes/bestcf-ip.txt.hash 2>/dev/null || echo "none")
+          NEW_HASH=$(sha256sum current/ctcc-ip.txt | awk '{print $1}')
+          OLD_HASH=$(cat hashes/ctcc-ip.txt.hash 2>/dev/null || echo "none")
           if [ "$NEW_HASH" != "$OLD_HASH" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "$NEW_HASH" > hashes/bestcf-ip.txt.hash
+            echo "$NEW_HASH" > hashes/ctcc-ip.txt.hash
           else
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
@@ -36,13 +36,13 @@ jobs:
         run: |
           curl -s -X POST https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage \
             -d chat_id=${{ secrets.TG_CHAT_ID }} \
-            -d text="bestcf-ip.txt 文件已更新"
+            -d text="ctcc-ip.txt 文件已更新"
 
       - name: Build outputs
         run: |
           mkdir -p docs
           touch docs/.nojekyll
-          cp current/bestcf-ip.txt docs/data.txt
+          cp current/ctcc-ip.txt docs/data.txt
 
       - name: Commit changes
         run: |
