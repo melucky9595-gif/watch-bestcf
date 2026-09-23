@@ -38,11 +38,29 @@ jobs:
             -d chat_id=${{ secrets.TG_CHAT_ID }} \
             -d text="ctcc-ip.txt 文件已更新"
 
+      - name: Speed test IPs
+        run: |
+          > result.txt
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            ip="${line%%#*}"
+            clean_ip=$(echo "$ip" | tr -d '[]')
+            ms=$(curl -s -o /dev/null --max-time 3 \
+              --resolve speed.cloudflare.com:443:"$clean_ip" \
+              -w "%{time_connect}" \
+              "https://speed.cloudflare.com/__down?bytes=1000" 2>/dev/null)
+            if [ -n "$ms" ]; then
+              ms_int=$(awk "BEGIN{printf \"%d\", $ms*1000}")
+              echo "$ms_int $ip" >> result.txt
+            fi
+          done < current/ctcc-ip.txt
+          sort -n result.txt | head -5 | awk '{print $2"#"$1"ms"}' > docs_data.txt
+
       - name: Build outputs
         run: |
           mkdir -p docs
           touch docs/.nojekyll
-          cp current/ctcc-ip.txt docs/data.txt
+          cp docs_data.txt docs/data.txt
 
       - name: Commit changes
         run: |
