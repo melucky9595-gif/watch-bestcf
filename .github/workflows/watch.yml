@@ -38,17 +38,11 @@ jobs:
             -d chat_id=${{ secrets.TG_CHAT_ID }} \
             -d text="bestcf-ip.txt 文件已更新"
 
-      - name: Build JSON API
+      - name: Build outputs
         run: |
           mkdir -p docs
           touch docs/.nojekyll
-          python3 -c "
-          import json
-          with open('current/bestcf-ip.txt') as f:
-              lines = [l.strip() for l in f if l.strip()]
-          with open('docs/data.json', 'w') as out:
-              json.dump({'updated_at': '$(date -u +%Y-%m-%dT%H:%M:%SZ)', 'ips': lines}, out, ensure_ascii=False, indent=2)
-          "
+          cp current/bestcf-ip.txt docs/data.txt
 
       - name: Commit changes
         run: |
