@@ -37,7 +37,7 @@ jobs:
           108.162.198.3:2083#jp 【日本3】 JP
           EOF
 
-      - name: Speed test IPs
+      - name: Speed and stability test
         run: |
           set +e
           > result.txt
@@ -47,16 +47,38 @@ jobs:
             note="${line#*#}"
             ip="${ip_port%%:*}"
             port="${ip_port#*:}"
-            data=$(curl -s -o /dev/null --max-time 8 \
-              --resolve speed.cloudflare.com:"$port":"$ip" \
-              -w "%{time_connect} %{speed_download}" \
-              "https://speed.cloudflare.com:$port/__down?bytes=5000000" 2>/dev/null)
-            ms=$(echo "$data" | awk '{print $1}')
-            speed=$(echo "$data" | awk '{print $2}')
-            if [ -n "$ms" ] && [ "$ms" != "0.000000" ] && [ -n "$speed" ]; then
-              mbps=$(awk "BEGIN{printf \"%.1f\", $speed*8/1000000}")
-              echo "$speed ${ip_port}#${note}_${mbps}Mbps" >> result.txt
+
+            # 测3次延迟,算抖动
+            lat1=$(curl -s -o /dev/null --max-time 3 --resolve speed.cloudflare.com:"$port":"$ip" -w "%{time_connect}" "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
+            lat2=$(curl -s -o /dev/null --max-time 3 --resolve speed.cloudflare.com:"$port":"$ip" -w "%{time_connect}" "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
+            lat3=$(curl -s -o /dev/null --max-time 3 --resolve speed.cloudflare.com:"$port":"$ip" -w "%{time_connect}" "https://speed.cloudflare.com:$port/__down?bytes=1000" 2>/dev/null)
+
+            if [ -z "$lat1" ] || [ -z "$lat2" ] || [ -z "$lat3" ]; then
+              continue
             fi
+
+            jitter_ms=$(awk -v a="$lat1" -v b="$lat2" -v c="$lat3" 'BEGIN{
+              max=a; min=a
+              if(b>max)max=b; if(b<min)min=b
+              if(c>max)max=c; if(c<min)min=c
+              printf "%.1f", (max-min)*1000
+            }')
+
+            # 测10秒持续下载速度(大文件+限时10秒)
+            data=$(curl -s -o /dev/null --max-time 10 \
+              --resolve speed.cloudflare.com:"$port":"$ip" \
+              -w "%{speed_download}" \
+              "https://speed.cloudflare.com:$port/__down?bytes=50000000" 2>/dev/null)
+
+            if [ -z "$data" ] || [ "$data" == "0" ]; then
+              continue
+            fi
+
+            mbps=$(awk -v s="$data" 'BEGIN{printf "%.1f", s*8/1000000}')
+
+            score=$(awk -v m="$mbps" -v j="$jitter_ms" 'BEGIN{printf "%.4f", m/(1+j/100)}')
+
+            echo "$score ${ip_port}#${note}_${mbps}Mbps_稳定性${jitter_ms}ms" >> result.txt
           done < current_list.txt
           sort -rn result.txt | awk '{$1=""; print substr($0,2)}' > docs_data.txt
           cat docs_data.txt
